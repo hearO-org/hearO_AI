@@ -1,0 +1,14 @@
+=== UrbanSound8K Commercial Subset Summary ===
+Allowed licenses: CC BY, CC0
+Include classes: car_horn,siren
+Total rows: 1358
+Allowed rows: 873
+
+License counts (all rows):
+license
+CC0                 535
+CC BY               338
+CC BY-NC            286
+Unknown             164
+Sampling+            27
+CC (unspecified)      8
