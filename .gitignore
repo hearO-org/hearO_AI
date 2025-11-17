@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual env
+.venv/
+env/
+*.egg-info/
+
+# Data & models
+data/US8K_commercial_subset/audio/
+outputs/*.pt
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Logs / temp
+runs/
+*.log
+
+# UrbanSound8K big files
+UrbanSound8K.tar.gz
+**/sound_datasets/
+data/US8K_commercial_subset/audio/

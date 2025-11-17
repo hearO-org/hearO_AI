@@ -1,0 +1,29 @@
+data_root: "./data/US8K_commercial_subset"  # filtered_metadata.csv가 있는 폴더
+metadata_csv: "filtered_metadata.csv"
+class_list: ["car_horn", "siren"]            # 필요시 ["car_horn","siren","street_music", ...]
+sample_rate: 16000
+n_mels: 64
+win_ms: 25
+hop_ms: 10
+
+train:
+  epochs: 20
+  batch_size: 32
+  lr: 1.5e-3
+  weight_decay: 1e-4
+  num_workers: 4
+  early_stop_patience: 5
+  mixup_alpha: 0.0   # 0이면 off
+  specaug_time_mask: 24
+  specaug_freq_mask: 8
+
+model:
+  name: "cnn_small"
+  in_channels: 1
+  num_filters: [32, 64, 128]
+  dropout: 0.25
+
+seed: 42
+device: "cuda"   # "cpu" 가능
+log_dir: "./runs"
+out_dir: "./outputs"
