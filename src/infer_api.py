@@ -96,7 +96,7 @@ async def infer(file: UploadFile = File(...)):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
         tmp.write(await file.read())
         tmp_path = tmp.name
-    try:햐
+    try:
         pred, probs = _infer_wavfile(tmp_path)
         return InferResponse(filename=file.filename, predicted=pred, probs=probs)
     finally:

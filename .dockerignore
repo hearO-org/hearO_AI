@@ -1,0 +1,24 @@
+# 가상환경 제외
+venv/
+.venv/
+
+# 데이터셋 제외
+data/
+outputs/
+
+# 캐시 & 로그
+__pycache__/
+*.pyc
+*.pyo
+*.log
+
+# 모델 파일 제외 (너 PANNs 안 쓰니까 혹시 있을 수도 있음)
+*.pt
+*.pth
+*.bin
+
+# 기타 큰 파일
+*.wav
+*.mp3
+*.zip
+*.tar
