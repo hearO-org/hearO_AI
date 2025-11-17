@@ -1,24 +1,51 @@
-# 가상환경 제외
+# 가상환경
 venv/
 .venv/
 
-# 데이터셋 제외
+# 데이터 (절대 넣지 마)
 data/
 outputs/
+datasets/
+input/
+raw/
+tmp/
+temp/
 
-# 캐시 & 로그
+# 음원 / 이미지 / 모델 파일
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+*.zip
+*.tar
+*.gz
+*.7z
+
+*.pt
+*.pth
+*.bin
+*.onnx
+*.npz
+*.npy
+
+# 기록/로그/캐시
 __pycache__/
 *.pyc
 *.pyo
 *.log
+*.cache
+*.pkl
 
-# 모델 파일 제외 (너 PANNs 안 쓰니까 혹시 있을 수도 있음)
-*.pt
-*.pth
-*.bin
+# 노트북 결과물
+*.ipynb
+.ipynb_checkpoints/
 
-# 기타 큰 파일
-*.wav
-*.mp3
-*.zip
-*.tar
+# 기타 큰 폴더
+checkpoints/
+models/
+saved/
+logs/
+
+# 환경파일
+.env
