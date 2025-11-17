@@ -22,4 +22,4 @@ COPY configs ./configs
 # 없으면 다음 추가
 # COPY infer_api.py .
 
-CMD ["uvicorn", "src.infer_api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "src.infer_api:app", "--host", "0.0.0.0", "--port", "8080"]
