@@ -10,3 +10,5 @@ tqdm
 pyyaml
 utils
 bs4
+fastapi
+uvicorn[standard]
