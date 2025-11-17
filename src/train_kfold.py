@@ -62,7 +62,7 @@ def main(cfg_path="./configs/config.yaml"):
 
     data_root = cfg["data_root"]
     meta_csv  = os.path.join(data_root, cfg["metadata_csv"])
-    audio_root= os.path.join(data_root, "audio")
+    audio_root = cfg.get("audio_root", None) or data_root
     classes   = cfg["class_list"]
     num_cls   = len(classes)
 
