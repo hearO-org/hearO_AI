@@ -22,4 +22,9 @@ COPY configs ./configs
 # 없으면 다음 추가
 # COPY infer_api.py .
 
-CMD ["uvicorn", "src.infer_api:app", "--host", "0.0.0.0", "--port", "8080"]
+# 로그 버퍼링 방지 + /app을 파이썬 모듈 경로에 추가
+ENV PYTHONUNBUFFERED=1 PYTHONPATH=/app
+
+# Cloud Run은 기본 PORT=8080을 주니까, 그냥 8080에 서버 띄우면 됨
+CMD ["python", "-m", "uvicorn", "src.infer_api:app", "--host", "0.0.0.0", "--port", "8080"]
+
