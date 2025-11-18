@@ -77,3 +77,12 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt", default=None)
     args = parser.parse_args()
     infer(args.wav, args.cfg, args.ckpt)
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "src.infer_api:app",  # 여기서 app은 위에서 FastAPI() 만든 변수 이름
+        host="0.0.0.0",
+        port=8080,
+    )
