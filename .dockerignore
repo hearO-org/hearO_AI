@@ -49,3 +49,6 @@ logs/
 
 # 환경파일
 .env
+
+outputs/*
+!outputs/best_model1.pt
