@@ -1,54 +1,58 @@
-# 가상환경
-venv/
-.venv/
+# ============================
+# Python / Cache / Env
+# ============================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# 데이터 (절대 넣지 마)
+.venv/
+venv/
+.env
+
+# ============================
+# OS / IDE
+# ============================
+.DS_Store
+.idea/
+.vscode/
+
+# ============================
+# 데이터 / 대규모 폴더 (절대 넣으면 안 됨)
+# ============================
 data/
-outputs/
 datasets/
 input/
 raw/
+logs/
+checkpoints/
 tmp/
 temp/
 
-# 음원 / 이미지 / 모델 파일
-*.wav
-*.mp3
-*.flac
-*.ogg
-*.m4a
+# ============================
+# 대형 파일 제외
+# ============================
 *.zip
 *.tar
 *.gz
 *.7z
 
-*.pt
-*.pth
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+
 *.bin
 *.onnx
-*.npz
 *.npy
+*.npz
 
-# 기록/로그/캐시
-__pycache__/
-*.pyc
-*.pyo
-*.log
-*.cache
-*.pkl
-
-# 노트북 결과물
-*.ipynb
-.ipynb_checkpoints/
-
-# 기타 큰 폴더
-checkpoints/
-models/
-saved/
-logs/
-
-# 환경파일
-.env
-
+# ============================
+# outputs 전체 제외
+# ============================
 outputs/*
-!outputs/best_model1.pt
+# 단 models 폴더만 다시 허용
+!outputs/models/
+# 그리고 그 안의 best_fold1.pt만 포함
+!outputs/models/best_fold1.pt

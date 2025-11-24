@@ -30,7 +30,7 @@ _model = CNN_Small(
 ).to(device).eval()
 
 # ckpt 경로 결정 (없으면 에러)
-ckpt_path = os.path.join(cfg["out_dir"], "best_fold1.pt")
+ckpt_path = "./outputs/models/best_fold1.pt"
 if not os.path.exists(ckpt_path):
     # 가장 최신 pt 한번 찾아보기
     outs = os.path.abspath(cfg["out_dir"])

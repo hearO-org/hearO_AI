@@ -11,7 +11,11 @@ env/
 
 # Data & models
 data/US8K_commercial_subset/audio/
-outputs/*.pt
+# outputs 전체 제외
+outputs/*
+# 단, 모델만 허용
+!outputs/models/
+!outputs/models/best_fold1.pt
 
 # OS / IDE
 .DS_Store
