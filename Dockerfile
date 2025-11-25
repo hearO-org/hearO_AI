@@ -27,4 +27,5 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
 
 # FastAPI infer API 실행
-CMD ["python", "-m", "src.infer_api"]
+CMD ["uvicorn", "src.infer_api:app", "--host", "0.0.0.0", "--port", "8010"]
+
