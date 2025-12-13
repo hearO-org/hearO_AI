@@ -1,5 +1,6 @@
 # src/infer_api.py
 import os, tempfile
+from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 import numpy as np
@@ -13,8 +14,11 @@ from src.models.cnn_small import CNN_Small
 from src.datasets.us8k import load_logmel  # 우리가 강화한 함수
 
 # ---------- Config ----------
-def get_cfg(path: str = "../configs/config.yaml") -> Dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
+def get_cfg(path: str = None):
+    # /app/src/infer_api.py 기준으로 /app 를 루트로 잡음
+    ROOT = Path(__file__).resolve().parents[1]  # /app/src -> /app
+    cfg_path = Path(path) if path else (ROOT / "configs" / "config.yaml")
+    with open(cfg_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 cfg = get_cfg()
