@@ -27,3 +27,8 @@ seed: 42
 device: "cuda"   # "cpu" 가능
 log_dir: "./runs"
 out_dir: "./outputs"
+
+inference:
+  threshold: 0.88     # 0.85~0.90 사이에서 튜닝
+  margin: 0.10        # (선택) 1등-2등 확률 차이 조건
+  unknown_label: "null"   # "" 또는 "unknown"
