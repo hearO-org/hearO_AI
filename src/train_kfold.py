@@ -137,8 +137,20 @@ def main(cfg_path="./configs/config.yaml"):
                     break
 
         fold_ckpt = os.path.join(cfg["out_dir"], f"best_fold{test_fold}.pt")
-        torch.save(best_state, fold_ckpt)
-        fold_scores.append(best_val)
+
+        ckpt = {
+            "state_dict": best_state,
+            "classes": classes,  # ★ class_list 순서 그대로 저장
+            "audio_cfg": {  # ★ 추론 때도 동일 전처리 강제
+                "sample_rate": cfg["sample_rate"],
+                "n_mels": cfg["n_mels"],
+                "win_ms": cfg["win_ms"],
+                "hop_ms": cfg["hop_ms"],
+            },
+            "model_cfg": cfg["model"],
+        }
+
+        torch.save(ckpt, fold_ckpt)
         print(f"[Fold {test_fold}] BEST VAL ACC = {best_val:.4f} | saved {fold_ckpt}")
 
     scores = np.array(fold_scores)
