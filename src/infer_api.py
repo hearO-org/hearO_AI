@@ -1,7 +1,6 @@
 # src/infer_api.py
 import os
 import tempfile
-import subprocess
 from collections import deque
 from typing import List, Dict, Optional, Tuple
 
@@ -14,28 +13,18 @@ import yaml
 from src.models.cnn_small import CNN_Small
 from src.datasets.us8k import load_logmel
 
+
 # ---------- Config ----------
-def get_cfg(path="./configs/config.yaml"):
+def get_cfg(path: str = "./configs/config.yaml"):
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
+
 
 cfg = get_cfg()
 device = torch.device("cuda" if torch.cuda.is_available() and cfg.get("device", "cpu") == "cuda" else "cpu")
 
-# ---------- Classes ----------
-classes: List[str] = list(cfg["class_list"])
-num_cls = len(classes)
 
-# ---------- Model (load-once) ----------
-mcfg = cfg["model"]
-_model = CNN_Small(
-    in_ch=mcfg["in_channels"],
-    num_classes=num_cls,
-    num_filters=tuple(mcfg["num_filters"]),
-    dropout=mcfg["dropout"],
-).to(device).eval()
-
-# ---------- checkpoint resolve ----------
+# ---------- Helpers ----------
 def _find_latest_pt(out_dir: str) -> Optional[str]:
     outs = os.path.abspath(out_dir)
     cand = []
@@ -46,6 +35,55 @@ def _find_latest_pt(out_dir: str) -> Optional[str]:
                     cand.append(os.path.join(root, f))
     return max(cand, key=os.path.getmtime) if cand else None
 
+
+def _load_ckpt_any(ckpt_path: str, map_location) -> Tuple[dict, Optional[List[str]], Optional[dict], Optional[dict]]:
+    """
+    return: (state_dict, classes, audio_cfg, model_cfg)
+    - old format: torch.save(state_dict)
+    - new format: torch.save({"state_dict":..., "classes":..., "audio_cfg":..., "model_cfg":...})
+    """
+    ckpt = torch.load(ckpt_path, map_location=map_location)
+    if isinstance(ckpt, dict) and "state_dict" in ckpt:
+        return ckpt["state_dict"], ckpt.get("classes"), ckpt.get("audio_cfg"), ckpt.get("model_cfg")
+    if isinstance(ckpt, dict):
+        return ckpt, None, None, None
+    raise RuntimeError(f"Unsupported checkpoint format: {type(ckpt)}")
+
+
+def _is_wav_bytes(b: bytes) -> bool:
+    # 최소 헤더 검사: "RIFF" .... "WAVE"
+    return len(b) >= 12 and b[0:4] == b"RIFF" and b[8:12] == b"WAVE"
+
+
+def _estimate_duration_sec_from_logmel(wav_path: str) -> float:
+    # mel frame 길이로 duration 근사: T * hop_ms / 1000
+    x = load_logmel(
+        wav_path,
+        sr=cfg["sample_rate"],
+        n_mels=cfg["n_mels"],
+        win_ms=cfg["win_ms"],
+        hop_ms=cfg["hop_ms"],
+    )
+    T = x.shape[-1] if isinstance(x, np.ndarray) else int(x.shape[-1])
+    return float(T) * float(cfg["hop_ms"]) / 1000.0
+
+
+# ---------- Load classes (default from cfg) ----------
+classes: List[str] = list(cfg["class_list"])
+num_cls = len(classes)
+
+
+# ---------- Model (load-once) ----------
+mcfg = cfg["model"]
+_model = CNN_Small(
+    in_ch=mcfg["in_channels"],
+    num_classes=num_cls,
+    num_filters=tuple(mcfg["num_filters"]),
+    dropout=mcfg["dropout"],
+).to(device).eval()
+
+
+# ---------- checkpoint resolve ----------
 ckpt_path = "./outputs/models/best_fold1.pt"
 if not os.path.exists(ckpt_path):
     ckpt_path = _find_latest_pt(cfg["out_dir"])
@@ -53,21 +91,30 @@ if not os.path.exists(ckpt_path):
 if not ckpt_path or not os.path.exists(ckpt_path):
     raise RuntimeError(f"Checkpoint(.pt) not found in {cfg['out_dir']}")
 
-ckpt = torch.load(ckpt_path, map_location=device)
-# 호환: state_dict만 저장된 경우 vs dict 저장된 경우
-if isinstance(ckpt, dict) and "state_dict" in ckpt:
-    _model.load_state_dict(ckpt["state_dict"])
-    # ckpt에 classes가 있으면 그걸 우선 사용(매핑 꼬임 방지)
-    if "classes" in ckpt and isinstance(ckpt["classes"], list):
-        classes = list(ckpt["classes"])
-        num_cls = len(classes)
-else:
-    _model.load_state_dict(ckpt)
+state_dict, ckpt_classes, ckpt_audio_cfg, ckpt_model_cfg = _load_ckpt_any(ckpt_path, map_location=device)
 
+# ckpt에 classes가 있으면 우선 사용 (라벨 매핑 꼬임 방지)
+if ckpt_classes is not None and isinstance(ckpt_classes, list) and len(ckpt_classes) > 0:
+    classes = list(ckpt_classes)
+    num_cls = len(classes)
+
+# ckpt에 model_cfg가 있으면 우선 사용 (구조 mismatch 방지)
+if ckpt_model_cfg is not None:
+    mcfg = ckpt_model_cfg
+    _model = CNN_Small(
+        in_ch=mcfg["in_channels"],
+        num_classes=num_cls,
+        num_filters=tuple(mcfg["num_filters"]),
+        dropout=mcfg["dropout"],
+    ).to(device).eval()
+
+_model.load_state_dict(state_dict)
 print(f"[API] Loaded checkpoint: {ckpt_path} on {device} | classes={classes}")
 
+
 # ---------- FastAPI ----------
-app = FastAPI(title="hearO Sound Alert API", version="1.1.0")
+app = FastAPI(title="hearO Sound Alert API", version="1.2.0")
+
 
 class InferResponse(BaseModel):
     filename: str
@@ -76,73 +123,26 @@ class InferResponse(BaseModel):
     probs: Dict[str, float]
     duration_sec: float
 
-# ---------- Real-time smoothing buffer ----------
-# session_id 별로 최근 N개 확률을 평균
+
+@app.get("/ping")
+def ping():
+    return {
+        "status": "ok",
+        "device": str(device),
+        "classes": classes,
+        "ckpt": os.path.basename(ckpt_path),
+    }
+
+
+@app.get("/classes")
+def get_classes():
+    return {"classes": classes}
+
+
+# ---------- Real-time smoothing ----------
 _SMOOTH_N = 5
 _session_probs: Dict[str, deque] = {}
 
-def _ffmpeg_to_wav16k_mono(in_path: str, out_path: str):
-    """
-    어떤 오디오든 ffmpeg로 16kHz mono wav로 변환
-    """
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", in_path,
-        "-ac", "1",
-        "-ar", str(int(cfg["sample_rate"])),
-        "-f", "wav",
-        out_path
-    ]
-    try:
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-    except Exception:
-        raise HTTPException(400, "Audio decode/convert failed (ffmpeg). Check input format or install ffmpeg.")
-
-def _estimate_duration_sec(wav_path: str) -> float:
-    # load_logmel을 이미 쓰니까, 여기서는 간단히 mel frame 길이로 duration 근사
-    # hop_ms 기준: T frames -> T * hop_ms / 1000
-    x = load_logmel(
-        wav_path,
-        sr=cfg["sample_rate"],
-        n_mels=cfg["n_mels"],
-        win_ms=cfg["win_ms"],
-        hop_ms=cfg["hop_ms"],
-    )
-    if isinstance(x, np.ndarray):
-        T = x.shape[-1]
-    else:
-        T = int(x.shape[-1])
-    return float(T) * float(cfg["hop_ms"]) / 1000.0
-
-def _infer_wavfile(wav_path: str) -> Tuple[str, float, Dict[str, float], float]:
-    # duration check (너무 짧으면 한 클래스로 쏠림)
-    duration_sec = _estimate_duration_sec(wav_path)
-
-    x = load_logmel(
-        wav_path,
-        sr=cfg["sample_rate"],
-        n_mels=cfg["n_mels"],
-        win_ms=cfg["win_ms"],
-        hop_ms=cfg["hop_ms"],
-    )
-    if isinstance(x, np.ndarray):
-        x = torch.tensor(x, dtype=torch.float32)
-
-    # (M,T) -> (1,1,M,T)
-    if x.ndim == 2:
-        x = x.unsqueeze(0).unsqueeze(0)
-    elif x.ndim == 3:
-        x = x.unsqueeze(0)
-
-    with torch.no_grad():
-        logits = _model(x.to(device))
-        probs = torch.softmax(logits, dim=1)[0].detach().cpu().numpy()
-
-    pred_idx = int(np.argmax(probs))
-    pred_label = classes[pred_idx]
-    conf = float(probs[pred_idx])
-    probs_dict = {c: float(probs[i]) for i, c in enumerate(classes)}
-    return pred_label, conf, probs_dict, duration_sec
 
 def _smooth_probs(session_id: str, probs_dict: Dict[str, float]) -> Dict[str, float]:
     dq = _session_probs.get(session_id)
@@ -152,48 +152,70 @@ def _smooth_probs(session_id: str, probs_dict: Dict[str, float]) -> Dict[str, fl
 
     dq.append(np.array([probs_dict[c] for c in classes], dtype=np.float32))
     avg = np.mean(np.stack(list(dq), axis=0), axis=0)
-
     return {c: float(avg[i]) for i, c in enumerate(classes)}
 
-@app.get("/ping")
-def ping():
-    return {"status": "ok", "device": str(device), "classes": classes, "ckpt": os.path.basename(ckpt_path)}
 
-@app.get("/classes")
-def get_classes():
-    return {"classes": classes}
+@torch.no_grad()
+def _infer_wavfile(wav_path: str) -> Tuple[str, float, Dict[str, float], float]:
+    duration_sec = _estimate_duration_sec_from_logmel(wav_path)
+
+    x = load_logmel(
+        wav_path,
+        sr=cfg["sample_rate"],
+        n_mels=cfg["n_mels"],
+        win_ms=cfg["win_ms"],
+        hop_ms=cfg["hop_ms"],
+    )
+
+    if isinstance(x, np.ndarray):
+        x = torch.tensor(x, dtype=torch.float32)
+
+    # (M,T) -> (1,1,M,T)
+    if x.ndim == 2:
+        x = x.unsqueeze(0).unsqueeze(0)
+    elif x.ndim == 3:
+        x = x.unsqueeze(0)
+
+    logits = _model(x.to(device))
+    probs = torch.softmax(logits, dim=1)[0].detach().cpu().numpy()
+
+    pred_idx = int(np.argmax(probs))
+    pred_label = classes[pred_idx]
+    conf = float(probs[pred_idx])
+    probs_dict = {c: float(probs[i]) for i, c in enumerate(classes)}
+    return pred_label, conf, probs_dict, duration_sec
+
 
 @app.post("/infer", response_model=InferResponse)
 async def infer(
     file: UploadFile = File(...),
-    session_id: str = Query("default", description="실시간 smoothing을 위한 세션 키"),
+    session_id: str = Query("default", description="실시간 smoothing용 세션 키"),
     smooth: bool = Query(True, description="최근 확률 평균(smoothing) 적용"),
-    min_sec: float = Query(0.8, description="이보다 짧으면 unknown 처리"),
-    threshold: float = Query(0.55, description="confidence threshold (미만이면 unknown)"),
+    min_sec: float = Query(0.8, description="이보다 짧으면 unknown"),
+    threshold: float = Query(0.55, description="confidence threshold"),
 ):
-    # 확장자 강제하지 않음 (webm/ogg 등 실시간 chunk 대응)
     raw = await file.read()
     if not raw or len(raw) < 32:
         raise HTTPException(400, "Empty/too small audio payload")
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{file.filename}") as tmp_in:
-        tmp_in.write(raw)
-        tmp_in_path = tmp_in.name
+    # ✅ WAV 전용: 헤더 검사 (프론트가 wav라고 했으니 여기서 확실히 잡아줌)
+    if not _is_wav_bytes(raw):
+        raise HTTPException(
+            400,
+            "Input is not a valid WAV (missing RIFF/WAVE header). "
+            "Please upload PCM 16-bit mono WAV."
+        )
 
-    tmp_wav_path = None
+    # 그대로 wav로 저장 (ffmpeg 없음)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+        tmp.write(raw)
+        tmp_wav_path = tmp.name
+
     try:
-        # 변환된 wav 경로
-        tmp_wav = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-        tmp_wav_path = tmp_wav.name
-        tmp_wav.close()
-
-        # 어떤 포맷이든 wav로 변환
-        _ffmpeg_to_wav16k_mono(tmp_in_path, tmp_wav_path)
-
         pred, conf, probs, duration_sec = _infer_wavfile(tmp_wav_path)
 
-        # 너무 짧으면 unknown (실시간 chunk 흔한 문제)
-        if duration_sec < float(min_sec):
+        # 너무 짧으면 unknown
+        if float(duration_sec) < float(min_sec):
             return InferResponse(
                 filename=file.filename,
                 predicted="unknown",
@@ -202,10 +224,9 @@ async def infer(
                 duration_sec=float(duration_sec),
             )
 
-        # smoothing 적용
+        # smoothing
         if smooth:
             probs_s = _smooth_probs(session_id, probs)
-            # smoothing 결과로 최종 결정
             best_label = max(probs_s.keys(), key=lambda k: probs_s[k])
             best_conf = float(probs_s[best_label])
             pred, conf, probs = best_label, best_conf, probs_s
@@ -223,9 +244,7 @@ async def infer(
         )
 
     finally:
-        for p in [tmp_in_path, tmp_wav_path]:
-            if p and os.path.exists(p):
-                try:
-                    os.remove(p)
-                except Exception:
-                    pass
+        try:
+            os.remove(tmp_wav_path)
+        except Exception:
+            pass
